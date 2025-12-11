@@ -12,7 +12,6 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/assets")
-@CrossOrigin(origins = "*")
 @RequiredArgsConstructor
 public class AssetController {
 
@@ -107,7 +106,7 @@ public class AssetController {
         assetService.deleteAsset(id);
         ApiResponse<Void> apiResponse = ApiResponse.successResponse(HttpStatus.NO_CONTENT.value(),
                 "Asset deleted successfully", null);
-        return ResponseEntity.noContent().build(); // No content for successful deletion
+        return ResponseEntity.noContent().build(); 
     }
 
     // 5. GET SINGLE ASSET
