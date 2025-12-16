@@ -5,6 +5,10 @@ import com.example.eam.ServiceMaintenance.Dto.ServiceRequestCreateDto;
 import com.example.eam.ServiceMaintenance.Dto.ServiceRequestResponse;
 import com.example.eam.ServiceMaintenance.Dto.ServiceRequestUpdateDto;
 import com.example.eam.ServiceMaintenance.Service.ServiceMaintenanceService;
+import com.example.eam.WorkOrder.Dto.ConvertToWorkOrderRequest;
+import com.example.eam.WorkOrder.Dto.WorkOrderDetailsResponse;
+import com.example.eam.WorkOrder.Service.WorkOrderService;
+
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -18,6 +22,8 @@ import org.springframework.web.bind.annotation.*;
 public class ServiceMaintenanceController {
 
     private final ServiceMaintenanceService service;
+    private final WorkOrderService workOrderService; 
+
 
     // CREATE
     @PostMapping
@@ -34,6 +40,19 @@ public class ServiceMaintenanceController {
                 );
 
         return ResponseEntity.status(HttpStatus.CREATED).body(body);
+    }
+    
+        @PostMapping("/{id}/convert-to-wo")
+    public ResponseEntity<ApiResponse<WorkOrderDetailsResponse>> convertToWorkOrder(
+            @PathVariable Long id,
+            @RequestBody(required = false) ConvertToWorkOrderRequest overrides) {
+
+        WorkOrderDetailsResponse wo = workOrderService.convertServiceRequestToWorkOrder(id, overrides);
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(
+                ApiResponse.successResponse(HttpStatus.CREATED.value(),
+                        "Service request converted to work order successfully", wo)
+        );
     }
 
     // GET SINGLE

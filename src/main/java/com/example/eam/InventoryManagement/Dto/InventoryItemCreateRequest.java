@@ -1,0 +1,52 @@
+package com.example.eam.InventoryManagement.Dto;
+
+import com.example.eam.Enum.InventoryCategory;
+import com.example.eam.Enum.UnitOfMeasure;
+import jakarta.validation.constraints.*;
+import lombok.Data;
+
+import java.math.BigDecimal;
+
+@Data
+public class InventoryItemCreateRequest {
+
+    @NotBlank
+    private String itemId;
+
+    @NotBlank
+    private String itemName;
+
+    @NotNull
+    private InventoryCategory category;
+
+    @NotNull
+    private UnitOfMeasure unitOfMeasure;
+
+    private String manufacturer;
+    private String manufacturerPartNumber;
+
+    @NotNull @Min(0)
+    private Integer stockLevel;
+
+    @NotNull @Min(0)
+    private Integer reorderPoint;
+
+    @NotNull @Min(1)
+    private Integer reorderQuantity;
+
+    @DecimalMin(value = "0.0", inclusive = true)
+    private BigDecimal costPerUnit;
+
+    @Min(0)
+    private Integer minStockLevel;
+
+    @Min(0)
+    private Integer maxStockLevel;
+
+    // Vendor lookup
+    private Long primaryVendorDbId;
+
+    // optional
+    private Boolean active;
+}
+

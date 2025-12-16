@@ -1,0 +1,125 @@
+package com.example.eam.WorkOrder.Entity;
+
+import com.example.eam.Asset.Entity.Asset;
+import com.example.eam.Enum.PriorityLevel;
+import com.example.eam.Enum.WorkOrderSource;
+import com.example.eam.Enum.WorkOrderStatus;
+import com.example.eam.Enum.WorkType;
+import com.example.eam.PreventiveMaintenance.Entity.PreventiveMaintenance;
+import com.example.eam.ServiceMaintenance.Entity.ServiceMaintenance;
+import jakarta.persistence.*;
+import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+
+@Entity
+@Table(
+    name = "work_orders",
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uk_work_orders_work_order_id", columnNames = "work_order_id"),
+        @UniqueConstraint(name = "uk_work_orders_service_request", columnNames = "service_request_id"),
+        @UniqueConstraint(name = "uk_work_orders_pm_due", columnNames = {"pm_template_id", "pm_due_date"})
+    },
+    indexes = {
+        @Index(name = "idx_work_orders_asset_id", columnList = "asset_id"),
+        @Index(name = "idx_work_orders_deleted", columnList = "deleted"),
+        @Index(name = "idx_work_orders_status", columnList = "status"),
+        @Index(name = "idx_work_orders_pm_template", columnList = "pm_template_id")
+    }
+)
+
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class WorkOrder {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    // Business/display WO code (separate from DB id)
+    @Column(name = "work_order_id", nullable = false, unique = true, length = 64)
+    private String workOrderId;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "pm_template_id")
+    private PreventiveMaintenance pmTemplate;
+
+        // Due date for this PM-generated Work Order (used to avoid duplicates)
+   @Column(name = "pm_due_date")
+   private LocalDate pmDueDate;
+    
+
+    // Optional link to Service Request (one request -> one WO)
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "service_request_id", unique = true)
+    private ServiceMaintenance linkedRequest;
+
+    // Asset is optional (allowed when WO is location-only)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "asset_id")
+    private Asset asset;
+
+    // Snapshot of location (auto from asset if present, but editable)
+    @Column(name = "location", length = 255)
+    private String location;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "work_type", nullable = false, length = 32)
+    private WorkType workType;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "priority", nullable = false, length = 16)
+    private PriorityLevel priority;
+
+    @Column(name = "wo_title", nullable = false, length = 255)
+    private String woTitle;
+
+    @Lob
+    @Column(name = "description_scope")
+    private String descriptionScope;
+
+    // "User lookup" stored as string for now (later can be a User entity)
+    @Column(name = "planner", length = 120)
+    private String planner;
+
+    @Column(name = "assigned_technician", length = 120)
+    private String assignedTechnician;
+
+    @Column(name = "assigned_crew_team", length = 120)
+    private String assignedCrewTeam;
+
+    @Column(name = "planned_start_datetime")
+    private LocalDateTime plannedStartDateTime;
+
+    @Column(name = "planned_end_datetime")
+    private LocalDateTime plannedEndDateTime;
+
+    @Column(name = "target_completion_date")
+    private LocalDate targetCompletionDate;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 32)
+    private WorkOrderStatus status;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "source", nullable = false, length = 32)
+    private WorkOrderSource source;
+
+    @Builder.Default
+    @Column(name = "deleted", nullable = false)
+    private boolean deleted = false;
+
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt;
+
+    @UpdateTimestamp
+    @Column(name = "updated_at", nullable = false)
+    private LocalDateTime updatedAt;
+}
+

@@ -26,6 +26,9 @@ public class ServiceMaintenance {
     @Column(name = "request_id", nullable = false, unique = true, length = 50)
     private String requestId;              // Business Request ID (SR-000001 etc.)
 
+    @Column(name = "linked_work_order_id", length = 64)
+    private String linkedWorkOrderId;
+
     @Column(name = "request_date", nullable = false)
     private LocalDateTime requestDate;      // Auto: current date-time
 

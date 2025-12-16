@@ -1,0 +1,129 @@
+package com.example.eam.VendorManagement.Service;
+
+import com.example.eam.VendorManagement.Dto.*;
+import com.example.eam.VendorManagement.Entity.Vendor;
+import com.example.eam.VendorManagement.Repository.VendorRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Consumer;
+
+@Service
+@RequiredArgsConstructor
+public class VendorService {
+
+    private final VendorRepository vendorRepository;
+
+    @Transactional
+    public VendorResponse create(VendorCreateRequest req) {
+
+        Vendor vendor = Vendor.builder()
+                .vendorId(generateUniqueVendorId())
+                .vendorName(req.getVendorName().trim())
+                .address(req.getAddress())
+                .contactPerson(req.getContactPerson().trim())
+                .email(req.getEmail().trim())
+                .phone(req.getPhone().trim())
+                .paymentTerms(req.getPaymentTerms())
+                .rating(req.getRating())
+                .active(req.getActive() == null || req.getActive())
+                .build();
+
+        Vendor saved = vendorRepository.save(vendor);
+        return toResponse(saved);
+    }
+
+    @Transactional
+    public VendorResponse patch(Long id, VendorPatchRequest req) {
+        Vendor vendor = getOrThrowActive(id);
+
+        updateIfNotBlank(req.getVendorName(), vendor::setVendorName);
+        updateIfNotBlank(req.getAddress(), vendor::setAddress);
+        updateIfNotBlank(req.getContactPerson(), vendor::setContactPerson);
+        updateIfNotBlank(req.getEmail(), vendor::setEmail);
+        updateIfNotBlank(req.getPhone(), vendor::setPhone);
+
+        if (req.getPaymentTerms() != null) vendor.setPaymentTerms(req.getPaymentTerms());
+        if (req.getRating() != null) vendor.setRating(req.getRating());
+        if (req.getActive() != null) vendor.setActive(req.getActive());
+
+        Vendor saved = vendorRepository.save(vendor);
+        return toResponse(saved);
+    }
+
+    @Transactional(readOnly = true)
+    public VendorResponse get(Long id) {
+        return toResponse(getOrThrowActive(id));
+    }
+
+    @Transactional(readOnly = true)
+    public Page<VendorResponse> list(Pageable pageable, boolean includeInactive) {
+        Page<Vendor> page = includeInactive
+                ? vendorRepository.findAll(pageable)
+                : vendorRepository.findByActiveTrue(pageable);
+
+        return page.map(this::toResponse);
+    }
+
+    /**
+     * Soft delete: set active=false (recommended for ERP/EAM audits).
+     */
+    @Transactional
+    public void delete(Long id) {
+        Vendor vendor = getOrThrowActive(id);
+        vendor.setActive(false);
+        vendorRepository.save(vendor);
+    }
+
+    // ---------------- Helpers ----------------
+
+    private Vendor getOrThrowActive(Long id) {
+        return vendorRepository.findByIdAndActiveTrue(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Vendor not found"));
+    }
+
+    private void updateIfNotBlank(String value, Consumer<String> setter) {
+        if (value != null && !value.trim().isEmpty()) {
+            setter.accept(value.trim());
+        }
+    }
+
+    private String generateUniqueVendorId() {
+        String datePart = LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE); // YYYYMMDD
+
+        for (int attempt = 0; attempt < 30; attempt++) {
+            int rand = ThreadLocalRandom.current().nextInt(0, 10000);
+            String candidate = String.format("VND-%s-%04d", datePart, rand);
+            if (!vendorRepository.existsByVendorId(candidate)) {
+                return candidate;
+            }
+        }
+
+        throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Unable to generate unique Vendor ID");
+    }
+
+    private VendorResponse toResponse(Vendor v) {
+        return VendorResponse.builder()
+                .id(v.getId())
+                .vendorId(v.getVendorId())
+                .vendorName(v.getVendorName())
+                .address(v.getAddress())
+                .contactPerson(v.getContactPerson())
+                .email(v.getEmail())
+                .phone(v.getPhone())
+                .paymentTerms(v.getPaymentTerms())
+                .rating(v.getRating())
+                .active(v.isActive())
+                .createdAt(v.getCreatedAt())
+                .updatedAt(v.getUpdatedAt())
+                .build();
+    }
+}
