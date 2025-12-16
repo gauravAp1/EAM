@@ -26,7 +26,8 @@ import java.util.Set;
                 @Index(name = "idx_service_contract_vendor", columnList = "vendor_id")
         }
 )
-@Data
+@Getter
+@Setter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
@@ -97,5 +98,20 @@ public class ServiceContract {
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
-}
 
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        ServiceContract that = (ServiceContract) o;
+        if (this.id != null && that.id != null) {
+            return this.id.equals(that.id);
+        }
+        return this.contractId != null && this.contractId.equals(that.contractId);
+    }
+
+    @Override
+    public int hashCode() {
+        return getClass().hashCode();
+    }
+}

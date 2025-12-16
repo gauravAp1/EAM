@@ -8,7 +8,8 @@ import lombok.*;
 
 @Entity
 @Table(name = "assets")
-@Data
+@Getter
+@Setter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
@@ -68,5 +69,20 @@ public class Asset {
 
     @OneToOne(mappedBy = "asset", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private AssetSafetyOperations safetyOperations;
-}
 
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Asset asset = (Asset) o;
+        if (this.id != null && asset.id != null) {
+            return this.id.equals(asset.id);
+        }
+        return this.assetId != null && this.assetId.equals(asset.assetId);
+    }
+
+    @Override
+    public int hashCode() {
+        return getClass().hashCode();
+    }
+}

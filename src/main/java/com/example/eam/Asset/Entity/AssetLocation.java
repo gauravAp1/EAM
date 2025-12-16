@@ -6,7 +6,8 @@ import lombok.*;
 
 @Entity
 @Table(name = "asset_location")
-@Data
+@Getter
+@Setter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
@@ -37,5 +38,20 @@ public class AssetLocation {
 
     @Column(name = "maintenance_team", length = 255)
     private String maintenanceTeam;
-}
 
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        AssetLocation that = (AssetLocation) o;
+        if (this.id != null && that.id != null) {
+            return this.id.equals(that.id);
+        }
+        return this.asset != null && that.asset != null && this.asset.equals(that.asset);
+    }
+
+    @Override
+    public int hashCode() {
+        return getClass().hashCode();
+    }
+}

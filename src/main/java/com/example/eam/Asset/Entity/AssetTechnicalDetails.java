@@ -6,7 +6,8 @@ import lombok.*;
 
 @Entity
 @Table(name = "asset_technical_details")
-@Data
+@Getter
+@Setter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
@@ -40,5 +41,20 @@ public class AssetTechnicalDetails {
 
     @Column(name = "capacity", length = 128)
     private String capacity;
-}
 
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        AssetTechnicalDetails that = (AssetTechnicalDetails) o;
+        if (this.id != null && that.id != null) {
+            return this.id.equals(that.id);
+        }
+        return this.asset != null && that.asset != null && this.asset.equals(that.asset);
+    }
+
+    @Override
+    public int hashCode() {
+        return getClass().hashCode();
+    }
+}

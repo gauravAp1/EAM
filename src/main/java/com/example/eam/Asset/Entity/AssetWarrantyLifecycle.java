@@ -8,7 +8,8 @@ import java.time.LocalDate;
 
 @Entity
 @Table(name = "asset_warranty_lifecycle")
-@Data
+@Getter
+@Setter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
@@ -48,5 +49,20 @@ public class AssetWarrantyLifecycle {
 
     @Column(name = "next_planned_maintenance")
     private LocalDate nextPlannedMaintenance;
-}
 
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        AssetWarrantyLifecycle that = (AssetWarrantyLifecycle) o;
+        if (this.id != null && that.id != null) {
+            return this.id.equals(that.id);
+        }
+        return this.asset != null && that.asset != null && this.asset.equals(that.asset);
+    }
+
+    @Override
+    public int hashCode() {
+        return getClass().hashCode();
+    }
+}

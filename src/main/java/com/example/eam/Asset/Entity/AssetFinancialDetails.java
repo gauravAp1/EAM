@@ -11,7 +11,8 @@ import com.example.eam.Enum.DepreciationMethod;
 
 @Entity
 @Table(name = "asset_financial_details")
-@Data
+@Getter
+@Setter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
@@ -55,4 +56,20 @@ public class AssetFinancialDetails {
 
     @Column(name = "current_book_value", precision = 19, scale = 4)
     private BigDecimal currentBookValue;
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        AssetFinancialDetails that = (AssetFinancialDetails) o;
+        if (this.id != null && that.id != null) {
+            return this.id.equals(that.id);
+        }
+        return this.asset != null && that.asset != null && this.asset.equals(that.asset);
+    }
+
+    @Override
+    public int hashCode() {
+        return getClass().hashCode();
+    }
 }
