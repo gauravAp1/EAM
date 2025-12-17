@@ -1,14 +1,10 @@
 package com.example.eam.Enum;
 
 public enum WorkOrderStatus {
-    DRAFT,
-    PLANNED,
-    ASSIGNED,
+    NEW,
+    APPROVED,
+    SCHEDULED,
     IN_PROGRESS,
-    ON_HOLD,
-    WAITING_FOR_PARTS,
     COMPLETED,
-    CLOSED,
-    CANCELED
+    CLOSED
 }
-

@@ -6,10 +6,22 @@ import com.example.eam.Asset.Entity.AssetLocation;
 import com.example.eam.Asset.Repository.AssetLocationRepository;
 import com.example.eam.Asset.Repository.AssetRepository;
 import com.example.eam.Enum.*;
+import com.example.eam.InventoryManagement.Entity.InventoryItem;
+import com.example.eam.InventoryManagement.Repository.InventoryItemRepository;
 import com.example.eam.ServiceMaintenance.Entity.ServiceMaintenance;
 import com.example.eam.ServiceMaintenance.Repository.ServiceMaintenanceRepository;
+import com.example.eam.Technician.Entity.Technician;
+import com.example.eam.Technician.Repository.TechnicianRepository;
+import com.example.eam.TechnicianTeam.Entity.TechnicianTeam;
+import com.example.eam.TechnicianTeam.Repository.TechnicianTeamRepository;
 import com.example.eam.WorkOrder.Dto.*;
 import com.example.eam.WorkOrder.Entity.WorkOrder;
+import com.example.eam.WorkOrder.Entity.WorkOrderLaborEntry;
+import com.example.eam.WorkOrder.Entity.WorkOrderMaterialPlan;
+import com.example.eam.WorkOrder.Entity.WorkOrderMaterialUsage;
+import com.example.eam.WorkOrder.Repository.WorkOrderLaborEntryRepository;
+import com.example.eam.WorkOrder.Repository.WorkOrderMaterialPlanRepository;
+import com.example.eam.WorkOrder.Repository.WorkOrderMaterialUsageRepository;
 import com.example.eam.WorkOrder.Repository.WorkOrderRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -18,21 +30,48 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Consumer;
 
 @Service
 @RequiredArgsConstructor
 public class WorkOrderService {
+    private static final Logger log = LoggerFactory.getLogger(WorkOrderService.class);
 
     private final WorkOrderRepository workOrderRepository;
     private final AssetRepository assetRepository;
     private final AssetLocationRepository assetLocationRepository;
     private final ServiceMaintenanceRepository serviceMaintenanceRepository;
+    private final TechnicianRepository technicianRepository;
+    private final TechnicianTeamRepository technicianTeamRepository;
+    private final InventoryItemRepository inventoryItemRepository;
+    private final WorkOrderLaborEntryRepository workOrderLaborEntryRepository;
+    private final WorkOrderMaterialUsageRepository workOrderMaterialUsageRepository;
+    private final WorkOrderMaterialPlanRepository workOrderMaterialPlanRepository;
+
+private static final Set<WorkOrderStatus> CREATION_ALLOWED_STATUSES = Set.of(
+        WorkOrderStatus.NEW,
+        WorkOrderStatus.APPROVED
+);
+
+private static final Map<WorkOrderStatus, Set<WorkOrderStatus>> STATUS_TRANSITIONS = Map.of(
+        WorkOrderStatus.NEW, Set.of(WorkOrderStatus.APPROVED),
+        WorkOrderStatus.APPROVED, Set.of(WorkOrderStatus.SCHEDULED),
+        WorkOrderStatus.SCHEDULED, Set.of(WorkOrderStatus.IN_PROGRESS),
+        WorkOrderStatus.IN_PROGRESS, Set.of(WorkOrderStatus.COMPLETED),
+        WorkOrderStatus.COMPLETED, Set.of(WorkOrderStatus.CLOSED)
+);
 
     // ---------------- CREATE (Manual) ----------------
 
@@ -52,6 +91,14 @@ public class WorkOrderService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Location is required when Asset is not selected");
         }
 
+        Technician technician = resolveTechnician(request.getAssignedTechnicianId());
+        TechnicianTeam team = resolveTeam(request.getAssignedTeamId());
+
+WorkOrderStatus status = request.getStatus() != null ? request.getStatus() : WorkOrderStatus.NEW;
+        if (!CREATION_ALLOWED_STATUSES.contains(status)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid status for new Work Order");
+        }
+
         WorkOrder wo = WorkOrder.builder()
                 .workOrderId(generateUniqueWorkOrderId())
                 .linkedRequest(null)
@@ -62,28 +109,42 @@ public class WorkOrderService {
                 .woTitle(request.getWoTitle())
                 .descriptionScope(request.getDescriptionScope())
                 .planner(request.getPlanner())
-                .assignedTechnician(request.getAssignedTechnician())
-                .assignedCrewTeam(request.getAssignedCrewTeam())
+                .assignedTechnician(technician)
+                .assignedTeam(team)
                 .plannedStartDateTime(request.getPlannedStartDateTime())
                 .plannedEndDateTime(request.getPlannedEndDateTime())
                 .targetCompletionDate(request.getTargetCompletionDate())
-                .status(request.getStatus() != null ? request.getStatus() : WorkOrderStatus.DRAFT)
+                .estimatedLaborHours(request.getEstimatedLaborHours())
+                .estimatedMaterialCost(request.getEstimatedMaterialCost())
+                .estimatedTotalCost(request.getEstimatedTotalCost())
+                .status(status)
                 .source(request.getSource() != null ? request.getSource() : WorkOrderSource.MANUAL)
                 .deleted(false)
                 .build();
 
         WorkOrder saved = workOrderRepository.save(wo);
+
+        if (request.getPlannedMaterials() != null && !request.getPlannedMaterials().isEmpty()) {
+            List<WorkOrderMaterialPlan> plans = request.getPlannedMaterials().stream()
+                    .map(planReq -> buildMaterialPlan(saved, planReq))
+                    .toList();
+            workOrderMaterialPlanRepository.saveAll(plans);
+        }
+
         return toDetailsResponse(saved);
     }
 
     // ---------------- CONVERT SR -> WO ----------------
 
-    @Transactional
-    public WorkOrderDetailsResponse convertServiceRequestToWorkOrder(Long serviceRequestDbId,
-                                                                     ConvertToWorkOrderRequest overrides) {
-
+        @Transactional
+public WorkOrderDetailsResponse convertServiceRequestToWorkOrder(Long serviceRequestDbId) {
+    try {
+        log.info("Starting conversion of Service Request ID: {}", serviceRequestDbId);
+        
         ServiceMaintenance sr = serviceMaintenanceRepository.findById(serviceRequestDbId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Service Request not found"));
+
+        log.info("Found Service Request: {}, Status: {}", sr.getRequestId(), sr.getStatus());
 
         // Already converted?
         if (sr.getStatus() == ServiceRequestStatus.CONVERTED_TO_WO) {
@@ -93,64 +154,68 @@ public class WorkOrderService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Work Order already exists for this Service Request");
         });
 
-        Asset asset = sr.getAsset(); // may be null
+        Asset asset = sr.getAsset();
+        log.info("Asset: {}", asset != null ? asset.getAssetId() : "null");
+        
         String location = resolveLocation(asset, sr.getLocation());
+        log.info("Resolved location: {}", location);
 
         if (asset == null && isBlank(location)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Cannot convert to WO: both Asset and Location are missing");
         }
 
-        // Copy from SR, allow overrides
-        WorkType workType = (overrides != null && overrides.getWorkType() != null)
-                ? overrides.getWorkType()
-                : mapMaintenanceTypeToWorkType(sr.getMaintenanceType());
-    PriorityLevel priority = (overrides != null && overrides.getPriority() != null)
-        ? overrides.getPriority()
-        : mapRequestPriorityToPriorityLevel(sr.getPriority());
+        WorkType workType = mapMaintenanceTypeToWorkType(sr.getMaintenanceType());
+        log.info("Mapped WorkType: {} from MaintenanceType: {}", workType, sr.getMaintenanceType());
+        
+        PriorityLevel priority = mapRequestPriorityToPriorityLevel(sr.getPriority());
+        log.info("Mapped Priority: {} from RequestPriority: {}", priority, sr.getPriority());
+        
+        String woTitle = sr.getShortTitle();
+        String desc = sr.getProblemDescription();
 
-
-        String woTitle = (overrides != null && !isBlank(overrides.getWoTitle()))
-                ? overrides.getWoTitle()
-                : sr.getShortTitle();
-
-        String desc = (overrides != null && !isBlank(overrides.getDescriptionScope()))
-                ? overrides.getDescriptionScope()
-                : sr.getProblemDescription();
-
-        WorkOrderStatus status = (overrides != null && overrides.getStatus() != null)
-                ? overrides.getStatus()
-                : WorkOrderStatus.DRAFT;
+        String generatedWoId = generateUniqueWorkOrderId();
+        log.info("Generated Work Order ID: {}", generatedWoId);
 
         WorkOrder wo = WorkOrder.builder()
-                .workOrderId(generateUniqueWorkOrderId())
-                .linkedRequest(sr)
-                .asset(asset)
-                .location(location)
-                .workType(workType != null ? workType : WorkType.CORRECTIVE)
-                .priority(priority != null ? priority : PriorityLevel.MEDIUM)
-                .woTitle(!isBlank(woTitle) ? woTitle : "Work Order from Service Request")
-                .descriptionScope(desc)
-                .planner(overrides != null ? overrides.getPlanner() : null)
-                .assignedTechnician(overrides != null ? overrides.getAssignedTechnician() : null)
-                .assignedCrewTeam(overrides != null ? overrides.getAssignedCrewTeam() : null)
-                .plannedStartDateTime(overrides != null ? overrides.getPlannedStartDateTime() : null)
-                .plannedEndDateTime(overrides != null ? overrides.getPlannedEndDateTime() : null)
-                .targetCompletionDate(overrides != null ? overrides.getTargetCompletionDate() : null)
-                .status(status)
-                .source(WorkOrderSource.REQUEST)
-                .deleted(false)
-                .build();
+        .workOrderId(generatedWoId)
+        .linkedRequest(sr)
+        .asset(asset)
+        .location(location)
+        .workType(workType != null ? workType : WorkType.CORRECTIVE)
+        .priority(priority != null ? priority : PriorityLevel.MEDIUM)
+        .woTitle(!isBlank(woTitle) ? woTitle : "Work Order from Service Request")
+        .descriptionScope(desc)
+        .planner(null)
+        .assignedTechnician(null)
+        .assignedTeam(null)
+        .plannedStartDateTime(null)
+        .plannedEndDateTime(null)
+        .targetCompletionDate(null)
+        .estimatedLaborHours(null)
+        .estimatedMaterialCost(null)
+        .estimatedTotalCost(null)
+        .status(WorkOrderStatus.NEW)  
+        .source(WorkOrderSource.REQUEST)
+        .deleted(false)
+        .build();
 
+        log.info("Saving Work Order...");
         WorkOrder saved = workOrderRepository.save(wo);
+        log.info("Work Order saved with ID: {}", saved.getId());
 
-        // Update SR status + store WO code (nice for UI)
         sr.setStatus(ServiceRequestStatus.CONVERTED_TO_WO);
         sr.setLinkedWorkOrderId(saved.getWorkOrderId());
         serviceMaintenanceRepository.save(sr);
+        log.info("Service Request updated with linked Work Order ID");
 
         return toDetailsResponse(saved);
+        
+    } catch (Exception e) {
+        log.error("Error converting Service Request to Work Order: ", e);
+        throw e;
     }
+}
 
     // ---------------- PATCH UPDATE ----------------
 
@@ -171,28 +236,141 @@ public class WorkOrderService {
             }
         }
 
-        updateIfNotNull(request.getLocation(), wo::setLocation);
+        if (request.getLocation() != null) {
+            String cleanLocation = isBlank(request.getLocation()) ? null : request.getLocation().trim();
+            wo.setLocation(cleanLocation);
+        }
+
         if (request.getWorkType() != null) wo.setWorkType(request.getWorkType());
         if (request.getPriority() != null) wo.setPriority(request.getPriority());
 
         updateIfNotNull(request.getWoTitle(), wo::setWoTitle);
         updateIfNotNull(request.getDescriptionScope(), wo::setDescriptionScope);
         updateIfNotNull(request.getPlanner(), wo::setPlanner);
-        updateIfNotNull(request.getAssignedTechnician(), wo::setAssignedTechnician);
-        updateIfNotNull(request.getAssignedCrewTeam(), wo::setAssignedCrewTeam);
+
+        if (request.getAssignedTechnicianId() != null) {
+            wo.setAssignedTechnician(resolveTechnician(request.getAssignedTechnicianId()));
+        } else if (Boolean.TRUE.equals(request.getClearTechnicianAssignment())) {
+            wo.setAssignedTechnician(null);
+        }
+
+        if (request.getAssignedTeamId() != null) {
+            wo.setAssignedTeam(resolveTeam(request.getAssignedTeamId()));
+        } else if (Boolean.TRUE.equals(request.getClearTeamAssignment())) {
+            wo.setAssignedTeam(null);
+        }
+
         updateIfNotNull(request.getPlannedStartDateTime(), wo::setPlannedStartDateTime);
         updateIfNotNull(request.getPlannedEndDateTime(), wo::setPlannedEndDateTime);
         updateIfNotNull(request.getTargetCompletionDate(), wo::setTargetCompletionDate);
+        updateIfNotNull(request.getEstimatedLaborHours(), wo::setEstimatedLaborHours);
+        updateIfNotNull(request.getEstimatedMaterialCost(), wo::setEstimatedMaterialCost);
+        updateIfNotNull(request.getEstimatedTotalCost(), wo::setEstimatedTotalCost);
 
-        if (request.getStatus() != null) wo.setStatus(request.getStatus());
+        if (request.getStatus() != null) {
+            WorkOrderStatus newStatus = request.getStatus();
+            if (newStatus == WorkOrderStatus.COMPLETED) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Use technician completion endpoint");
+            }
+            if (newStatus == WorkOrderStatus.CLOSED) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Use supervisor close endpoint");
+            }
+            validateStatusTransition(wo.getStatus(), newStatus);
+            handleStatusSideEffects(wo, newStatus);
+            wo.setStatus(newStatus);
+        }
+
         if (request.getSource() != null) wo.setSource(request.getSource());
 
-        // validation
         if (wo.getAsset() == null && isBlank(wo.getLocation())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Location is required when Asset is not selected");
         }
 
+        WorkOrder saved = workOrderRepository.save(wo);
+        return toDetailsResponse(saved);
+    }
+
+    // ---------------- COMPLETION / CLOSE FLOW ----------------
+
+    @Transactional
+    public WorkOrderDetailsResponse recordTechnicianCompletion(Long id, WorkOrderCompletionRequest request) {
+        if (request == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Completion payload is required");
+        }
+
+        WorkOrder wo = getWorkOrderOrThrow(id);
+        if (wo.getStatus() != WorkOrderStatus.IN_PROGRESS) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Only in-progress work orders can be completed by technicians");
+        }
+
+        if (request.getActualStartDateTime() != null) {
+            wo.setActualStartDateTime(request.getActualStartDateTime());
+        } else if (wo.getActualStartDateTime() == null) {
+            wo.setActualStartDateTime(LocalDateTime.now());
+        }
+
+        if (request.getActualEndDateTime() != null) {
+            wo.setActualEndDateTime(request.getActualEndDateTime());
+        } else {
+            wo.setActualEndDateTime(LocalDateTime.now());
+        }
+
+        updateIfNotNull(request.getCompletionNotes(), wo::setCompletionNotes);
+        updateIfNotNull(request.getFailureCause(), wo::setFailureCause);
+        updateIfNotNull(request.getRemedyAction(), wo::setRemedyAction);
+        updateIfNotNull(request.getBeforePhotoUrl(), wo::setBeforePhotoUrl);
+        updateIfNotNull(request.getAfterPhotoUrl(), wo::setAfterPhotoUrl);
+
+        BigDecimal totalLaborHours = BigDecimal.ZERO;
+        BigDecimal totalLaborCost = BigDecimal.ZERO;
+        if (request.getLaborEntries() != null) {
+            for (WorkOrderLaborEntryRequest laborRequest : request.getLaborEntries()) {
+                WorkOrderLaborEntry entry = buildLaborEntry(wo, laborRequest);
+                workOrderLaborEntryRepository.save(entry);
+                totalLaborHours = totalLaborHours.add(entry.getLaborHours());
+                if (entry.getLaborCost() != null) {
+                    totalLaborCost = totalLaborCost.add(entry.getLaborCost());
+                }
+            }
+        }
+
+        wo.setActualLaborHours(totalLaborHours.compareTo(BigDecimal.ZERO) > 0 ? totalLaborHours : null);
+        wo.setActualLaborCost(totalLaborCost.compareTo(BigDecimal.ZERO) > 0 ? totalLaborCost : null);
+
+        BigDecimal totalMaterialCost = BigDecimal.ZERO;
+        if (request.getMaterialsUsed() != null) {
+            for (WorkOrderMaterialUsageRequest usageRequest : request.getMaterialsUsed()) {
+                WorkOrderMaterialUsage usage = buildMaterialUsage(wo, usageRequest);
+                workOrderMaterialUsageRepository.save(usage);
+                if (usage.getTotalCostSnapshot() != null) {
+                    totalMaterialCost = totalMaterialCost.add(usage.getTotalCostSnapshot());
+                }
+            }
+        }
+
+        wo.setActualMaterialCost(totalMaterialCost.compareTo(BigDecimal.ZERO) > 0 ? totalMaterialCost : null);
+        wo.setActualTotalCost(addCosts(wo.getActualLaborCost(), wo.getActualMaterialCost()));
+
+        validateStatusTransition(wo.getStatus(), WorkOrderStatus.COMPLETED);
+        wo.setStatus(WorkOrderStatus.COMPLETED);
+
+        WorkOrder saved = workOrderRepository.save(wo);
+        return toDetailsResponse(saved);
+    }
+
+    @Transactional
+    public WorkOrderDetailsResponse closeWorkOrder(Long id, WorkOrderCloseRequest request) {
+        WorkOrder wo = getWorkOrderOrThrow(id);
+        if (wo.getStatus() != WorkOrderStatus.COMPLETED) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only completed work orders can be closed");
+        }
+        if (request != null) {
+            updateIfNotNull(request.getSupervisorNotes(), wo::setSupervisorNotes);
+        }
+        validateStatusTransition(wo.getStatus(), WorkOrderStatus.CLOSED);
+        wo.setStatus(WorkOrderStatus.CLOSED);
         WorkOrder saved = workOrderRepository.save(wo);
         return toDetailsResponse(saved);
     }
@@ -228,7 +406,7 @@ public class WorkOrderService {
     public void deleteWorkOrder(Long id) {
         WorkOrder wo = getWorkOrderOrThrow(id);
         wo.setDeleted(true);
-        wo.setStatus(WorkOrderStatus.CANCELED);
+        wo.setStatus(WorkOrderStatus.CLOSED);
         workOrderRepository.save(wo);
     }
 
@@ -273,6 +451,196 @@ public class WorkOrderService {
         return s == null || s.trim().isEmpty();
     }
 
+    private void validateStatusTransition(WorkOrderStatus current, WorkOrderStatus requested) {
+        if (requested == null || current == requested) return;
+        Set<WorkOrderStatus> allowed = STATUS_TRANSITIONS.getOrDefault(current, Set.of());
+        if (!allowed.contains(requested)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    String.format("Cannot move Work Order from %s to %s", current, requested));
+        }
+    }
+
+    private void handleStatusSideEffects(WorkOrder wo, WorkOrderStatus newStatus) {
+        if (newStatus == WorkOrderStatus.IN_PROGRESS && wo.getActualStartDateTime() == null) {
+            wo.setActualStartDateTime(LocalDateTime.now());
+        }
+    }
+
+    private Technician resolveTechnician(Long technicianId) {
+        if (technicianId == null) return null;
+        return technicianRepository.findById(technicianId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Technician not found: " + technicianId));
+    }
+
+    private TechnicianTeam resolveTeam(Long teamId) {
+        if (teamId == null) return null;
+        return technicianTeamRepository.findById(teamId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Technician team not found: " + teamId));
+    }
+
+    private WorkOrderLaborEntry buildLaborEntry(WorkOrder workOrder, WorkOrderLaborEntryRequest request) {
+        if (request == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Labor entry payload is required");
+        }
+        BigDecimal hours = normalizeHours(request.getLaborHours(), "laborHours");
+        Technician technician = resolveTechnician(request.getTechnicianId());
+        BigDecimal hourlyRate = normalizeCurrency(request.getHourlyRate(), "hourlyRate");
+        BigDecimal laborCost = hourlyRate != null
+                ? hourlyRate.multiply(hours).setScale(2, RoundingMode.HALF_UP)
+                : null;
+
+        return WorkOrderLaborEntry.builder()
+                .workOrder(workOrder)
+                .technician(technician)
+                .technicianNameSnapshot(technician != null ? technician.getFullName() : null)
+                .laborHours(hours)
+                .hourlyRate(hourlyRate)
+                .laborCost(laborCost)
+                .laborDate(request.getLaborDate())
+                .notes(request.getNotes())
+                .build();
+    }
+
+    private WorkOrderMaterialPlan buildMaterialPlan(WorkOrder workOrder, WorkOrderMaterialPlanRequest request) {
+        if (request == null || request.getInventoryItemId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Inventory item is required for planned material");
+        }
+        if (request.getQuantity() == null || request.getQuantity() < 1) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Planned material quantity must be >= 1");
+        }
+
+        InventoryItem item = inventoryItemRepository.findById(request.getInventoryItemId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Inventory item not found: " + request.getInventoryItemId()));
+
+        int stock = item.getStockLevel() != null ? item.getStockLevel() : 0;
+        if (stock < request.getQuantity()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Insufficient stock for item %s. Requested %d, available %d"
+                            .formatted(item.getItemId(), request.getQuantity(), stock));
+        }
+
+        BigDecimal unitCost = normalizeCurrency(item.getCostPerUnit(), "costPerUnit");
+        BigDecimal totalCost = unitCost != null
+                ? unitCost.multiply(BigDecimal.valueOf(request.getQuantity())).setScale(2, RoundingMode.HALF_UP)
+                : null;
+
+        return WorkOrderMaterialPlan.builder()
+                .workOrder(workOrder)
+                .inventoryItem(item)
+                .quantityPlanned(request.getQuantity())
+                .unitCostSnapshot(unitCost)
+                .totalCostSnapshot(totalCost)
+                .notes(request.getNotes())
+                .build();
+    }
+
+    private WorkOrderMaterialUsage buildMaterialUsage(WorkOrder workOrder, WorkOrderMaterialUsageRequest request) {
+        if (request == null || request.getInventoryItemId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Inventory item is required for material usage");
+        }
+        if (request.getQuantityUsed() == null || request.getQuantityUsed() < 1) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "quantityUsed must be >= 1");
+        }
+
+        InventoryItem item = inventoryItemRepository.findById(request.getInventoryItemId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Inventory item not found: " + request.getInventoryItemId()));
+
+        int currentStock = item.getStockLevel() != null ? item.getStockLevel() : 0;
+        if (currentStock < request.getQuantityUsed()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Insufficient stock for item " + item.getItemId());
+        }
+
+        item.setStockLevel(currentStock - request.getQuantityUsed());
+        inventoryItemRepository.save(item);
+
+        BigDecimal unitCost = normalizeCurrency(item.getCostPerUnit(), "costPerUnit");
+        BigDecimal totalCost = unitCost != null
+                ? unitCost.multiply(BigDecimal.valueOf(request.getQuantityUsed())).setScale(2, RoundingMode.HALF_UP)
+                : null;
+
+        return WorkOrderMaterialUsage.builder()
+                .workOrder(workOrder)
+                .inventoryItem(item)
+                .quantityUsed(request.getQuantityUsed())
+                .unitCostSnapshot(unitCost)
+                .totalCostSnapshot(totalCost)
+                .notes(request.getNotes())
+                .build();
+    }
+
+    private BigDecimal normalizeHours(BigDecimal value, String fieldName) {
+        if (value == null || value.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, fieldName + " must be greater than zero");
+        }
+        return value.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal normalizeCurrency(BigDecimal value, String fieldName) {
+        if (value == null) return null;
+        if (value.compareTo(BigDecimal.ZERO) < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, fieldName + " cannot be negative");
+        }
+        return value.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal addCosts(BigDecimal left, BigDecimal right) {
+        if (left == null) return right;
+        if (right == null) return left;
+        return left.add(right);
+    }
+
+    private WorkOrderLaborEntryResponse toLaborEntryResponse(WorkOrderLaborEntry entry) {
+        Technician technician = entry.getTechnician();
+        String techName = entry.getTechnicianNameSnapshot();
+        if (techName == null && technician != null) {
+            techName = technician.getFullName();
+        }
+
+        return WorkOrderLaborEntryResponse.builder()
+                .id(entry.getId())
+                .technicianId(technician != null ? technician.getId() : null)
+                .technicianName(techName)
+                .laborHours(entry.getLaborHours())
+                .hourlyRate(entry.getHourlyRate())
+                .laborCost(entry.getLaborCost())
+                .laborDate(entry.getLaborDate())
+                .notes(entry.getNotes())
+                .build();
+    }
+
+    private WorkOrderMaterialUsageResponse toMaterialUsageResponse(WorkOrderMaterialUsage usage) {
+        InventoryItem item = usage.getInventoryItem();
+        return WorkOrderMaterialUsageResponse.builder()
+                .id(usage.getId())
+                .inventoryItemId(item != null ? item.getId() : null)
+                .itemId(item != null ? item.getItemId() : null)
+                .itemName(item != null ? item.getItemName() : null)
+                .quantityUsed(usage.getQuantityUsed())
+                .unitCostSnapshot(usage.getUnitCostSnapshot())
+                .totalCostSnapshot(usage.getTotalCostSnapshot())
+                .notes(usage.getNotes())
+                .build();
+    }
+
+    private WorkOrderMaterialPlanResponse toMaterialPlanResponse(WorkOrderMaterialPlan plan) {
+        InventoryItem item = plan.getInventoryItem();
+        return WorkOrderMaterialPlanResponse.builder()
+                .id(plan.getId())
+                .inventoryItemId(item != null ? item.getId() : null)
+                .itemId(item != null ? item.getItemId() : null)
+                .itemName(item != null ? item.getItemName() : null)
+                .quantityPlanned(plan.getQuantityPlanned())
+                .unitCostSnapshot(plan.getUnitCostSnapshot())
+                .totalCostSnapshot(plan.getTotalCostSnapshot())
+                .notes(plan.getNotes())
+                .build();
+    }
+
     private WorkType mapMaintenanceTypeToWorkType(MaintenanceType mt) {
         if (mt == null) return WorkType.CORRECTIVE;
         return switch (mt) {
@@ -286,6 +654,20 @@ public class WorkOrderService {
     private WorkOrderDetailsResponse toDetailsResponse(WorkOrder wo) {
         Asset asset = wo.getAsset();
         ServiceMaintenance sr = wo.getLinkedRequest();
+        Technician technician = wo.getAssignedTechnician();
+        TechnicianTeam team = wo.getAssignedTeam();
+
+        List<WorkOrderLaborEntryResponse> laborEntries = workOrderLaborEntryRepository.findByWorkOrder_Id(wo.getId()).stream()
+                .map(this::toLaborEntryResponse)
+                .toList();
+
+        List<WorkOrderMaterialUsageResponse> materialUsages = workOrderMaterialUsageRepository.findByWorkOrder_Id(wo.getId()).stream()
+                .map(this::toMaterialUsageResponse)
+                .toList();
+
+        List<WorkOrderMaterialPlanResponse> plannedMaterials = workOrderMaterialPlanRepository.findByWorkOrder_Id(wo.getId()).stream()
+                .map(this::toMaterialPlanResponse)
+                .toList();
 
         return WorkOrderDetailsResponse.builder()
                 .id(wo.getId())
@@ -301,13 +683,33 @@ public class WorkOrderService {
                 .woTitle(wo.getWoTitle())
                 .descriptionScope(wo.getDescriptionScope())
                 .planner(wo.getPlanner())
-                .assignedTechnician(wo.getAssignedTechnician())
-                .assignedCrewTeam(wo.getAssignedCrewTeam())
+                .assignedTechnicianId(technician != null ? technician.getId() : null)
+                .assignedTechnicianName(technician != null ? technician.getFullName() : null)
+                .assignedTeamId(team != null ? team.getId() : null)
+                .assignedTeamName(team != null ? team.getTeamName() : null)
                 .plannedStartDateTime(wo.getPlannedStartDateTime())
                 .plannedEndDateTime(wo.getPlannedEndDateTime())
+                .actualStartDateTime(wo.getActualStartDateTime())
+                .actualEndDateTime(wo.getActualEndDateTime())
                 .targetCompletionDate(wo.getTargetCompletionDate())
+                .estimatedLaborHours(wo.getEstimatedLaborHours())
+                .estimatedMaterialCost(wo.getEstimatedMaterialCost())
+                .estimatedTotalCost(wo.getEstimatedTotalCost())
+                .actualLaborHours(wo.getActualLaborHours())
+                .actualLaborCost(wo.getActualLaborCost())
+                .actualMaterialCost(wo.getActualMaterialCost())
+                .actualTotalCost(wo.getActualTotalCost())
+                .completionNotes(wo.getCompletionNotes())
+                .failureCause(wo.getFailureCause())
+                .remedyAction(wo.getRemedyAction())
+                .beforePhotoUrl(wo.getBeforePhotoUrl())
+                .afterPhotoUrl(wo.getAfterPhotoUrl())
+                .supervisorNotes(wo.getSupervisorNotes())
                 .status(wo.getStatus())
                 .source(wo.getSource())
+                .plannedMaterials(plannedMaterials)
+                .laborEntries(laborEntries)
+                .materialUsages(materialUsages)
                 .createdAt(wo.getCreatedAt())
                 .updatedAt(wo.getUpdatedAt())
                 .build();
@@ -324,4 +726,3 @@ public class WorkOrderService {
 }
 
 }
-

@@ -17,5 +17,6 @@ public interface ServiceMaintenanceRepository extends JpaRepository<ServiceMaint
     boolean existsByRequestId(String requestId);
 
     Optional<ServiceMaintenance> findTopByOrderByIdDesc();   // for auto-numbering
-}
 
+    Page<ServiceMaintenance> findByStatusNot(ServiceRequestStatus status, Pageable pageable);
+}

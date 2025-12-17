@@ -115,7 +115,7 @@ public class ServiceMaintenanceService {
 
     @Transactional(readOnly = true)
     public Page<ServiceRequestResponse> list(Pageable pageable) {
-        return serviceRepo.findAll(pageable)
+        return serviceRepo.findByStatusNot(ServiceRequestStatus.CONVERTED_TO_WO, pageable)
                 .map(this::toResponse);
     }
 
@@ -241,4 +241,3 @@ public class ServiceMaintenanceService {
                 .build();
     }
 }
-

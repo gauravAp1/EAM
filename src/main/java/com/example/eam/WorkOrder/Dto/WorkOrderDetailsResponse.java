@@ -7,8 +7,10 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 import lombok.Builder;
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @Builder
@@ -27,13 +29,33 @@ import java.time.LocalDateTime;
         "woTitle",
         "descriptionScope",
         "planner",
-        "assignedTechnician",
-        "assignedCrewTeam",
+        "assignedTechnicianId",
+        "assignedTechnicianName",
+        "assignedTeamId",
+        "assignedTeamName",
         "plannedStartDateTime",
         "plannedEndDateTime",
+        "actualStartDateTime",
+        "actualEndDateTime",
         "targetCompletionDate",
+        "estimatedLaborHours",
+        "estimatedMaterialCost",
+        "estimatedTotalCost",
+        "actualLaborHours",
+        "actualLaborCost",
+        "actualMaterialCost",
+        "actualTotalCost",
+        "completionNotes",
+        "failureCause",
+        "remedyAction",
+        "beforePhotoUrl",
+        "afterPhotoUrl",
+        "supervisorNotes",
+        "plannedMaterials",
         "status",
         "source",
+        "laborEntries",
+        "materialUsages",
         "createdAt",
         "updatedAt"
 })
@@ -58,17 +80,37 @@ public class WorkOrderDetailsResponse {
     private String descriptionScope;
 
     private String planner;
-    private String assignedTechnician;
-    private String assignedCrewTeam;
+    private Long assignedTechnicianId;
+    private String assignedTechnicianName;
+    private Long assignedTeamId;
+    private String assignedTeamName;
 
     private LocalDateTime plannedStartDateTime;
     private LocalDateTime plannedEndDateTime;
+    private LocalDateTime actualStartDateTime;
+    private LocalDateTime actualEndDateTime;
     private LocalDate targetCompletionDate;
+    private BigDecimal estimatedLaborHours;
+    private BigDecimal estimatedMaterialCost;
+    private BigDecimal estimatedTotalCost;
+    private BigDecimal actualLaborHours;
+    private BigDecimal actualLaborCost;
+    private BigDecimal actualMaterialCost;
+    private BigDecimal actualTotalCost;
+    private String completionNotes;
+    private String failureCause;
+    private String remedyAction;
+    private String beforePhotoUrl;
+    private String afterPhotoUrl;
+    private String supervisorNotes;
 
     private WorkOrderStatus status;
     private WorkOrderSource source;
 
+    private List<WorkOrderMaterialPlanResponse> plannedMaterials;
+    private List<WorkOrderLaborEntryResponse> laborEntries;
+    private List<WorkOrderMaterialUsageResponse> materialUsages;
+
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }
-

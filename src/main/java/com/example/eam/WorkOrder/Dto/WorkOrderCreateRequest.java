@@ -8,8 +8,10 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 public class WorkOrderCreateRequest {
@@ -32,15 +34,20 @@ public class WorkOrderCreateRequest {
     private String descriptionScope;
 
     private String planner;
-    private String assignedTechnician;
-    private String assignedCrewTeam;
+    private Long assignedTechnicianId;
+    private Long assignedTeamId;
 
     private LocalDateTime plannedStartDateTime;
     private LocalDateTime plannedEndDateTime;
     private LocalDate targetCompletionDate;
 
+    private BigDecimal estimatedLaborHours;
+    private BigDecimal estimatedMaterialCost;
+    private BigDecimal estimatedTotalCost;
+
     // optional; defaults handled in service
     private WorkOrderStatus status;
     private WorkOrderSource source;
-}
 
+    private List<WorkOrderMaterialPlanRequest> plannedMaterials;
+}

@@ -33,6 +33,20 @@ public class WorkOrderController {
         return ResponseEntity.ok(ApiResponse.successResponse(HttpStatus.OK.value(), "Work order updated successfully", data));
     }
 
+    @PostMapping("/{id}/complete")
+    public ResponseEntity<ApiResponse<WorkOrderDetailsResponse>> complete(@PathVariable Long id,
+                                                                          @Valid @RequestBody WorkOrderCompletionRequest request) {
+        WorkOrderDetailsResponse data = workOrderService.recordTechnicianCompletion(id, request);
+        return ResponseEntity.ok(ApiResponse.successResponse(HttpStatus.OK.value(), "Work order marked as completed", data));
+    }
+
+    @PostMapping("/{id}/close")
+    public ResponseEntity<ApiResponse<WorkOrderDetailsResponse>> close(@PathVariable Long id,
+                                                                       @RequestBody WorkOrderCloseRequest request) {
+        WorkOrderDetailsResponse data = workOrderService.closeWorkOrder(id, request);
+        return ResponseEntity.ok(ApiResponse.successResponse(HttpStatus.OK.value(), "Work order closed successfully", data));
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<WorkOrderDetailsResponse>> get(@PathVariable Long id) {
         WorkOrderDetailsResponse data = workOrderService.getWorkOrderDetails(id);
@@ -51,4 +65,3 @@ public class WorkOrderController {
         return ResponseEntity.ok(ApiResponse.successResponse(HttpStatus.OK.value(), "Work order deleted successfully", null));
     }
 }
-

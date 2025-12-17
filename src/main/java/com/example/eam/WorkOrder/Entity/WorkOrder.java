@@ -7,11 +7,14 @@ import com.example.eam.Enum.WorkOrderStatus;
 import com.example.eam.Enum.WorkType;
 import com.example.eam.PreventiveMaintenance.Entity.PreventiveMaintenance;
 import com.example.eam.ServiceMaintenance.Entity.ServiceMaintenance;
+import com.example.eam.Technician.Entity.Technician;
+import com.example.eam.TechnicianTeam.Entity.TechnicianTeam;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -87,11 +90,13 @@ public class WorkOrder {
     @Column(name = "planner", length = 120)
     private String planner;
 
-    @Column(name = "assigned_technician", length = 120)
-    private String assignedTechnician;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "assigned_technician_id")
+    private Technician assignedTechnician;
 
-    @Column(name = "assigned_crew_team", length = 120)
-    private String assignedCrewTeam;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "assigned_team_id")
+    private TechnicianTeam assignedTeam;
 
     @Column(name = "planned_start_datetime")
     private LocalDateTime plannedStartDateTime;
@@ -102,6 +107,12 @@ public class WorkOrder {
     @Column(name = "target_completion_date")
     private LocalDate targetCompletionDate;
 
+    @Column(name = "actual_start_datetime")
+    private LocalDateTime actualStartDateTime;
+
+    @Column(name = "actual_end_datetime")
+    private LocalDateTime actualEndDateTime;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
     private WorkOrderStatus status;
@@ -109,6 +120,49 @@ public class WorkOrder {
     @Enumerated(EnumType.STRING)
     @Column(name = "source", nullable = false, length = 32)
     private WorkOrderSource source;
+
+    @Column(name = "estimated_labor_hours", precision = 10, scale = 2)
+    private BigDecimal estimatedLaborHours;
+
+    @Column(name = "estimated_material_cost", precision = 19, scale = 2)
+    private BigDecimal estimatedMaterialCost;
+
+    @Column(name = "estimated_total_cost", precision = 19, scale = 2)
+    private BigDecimal estimatedTotalCost;
+
+    @Column(name = "actual_labor_hours", precision = 10, scale = 2)
+    private BigDecimal actualLaborHours;
+
+    @Column(name = "actual_labor_cost", precision = 19, scale = 2)
+    private BigDecimal actualLaborCost;
+
+    @Column(name = "actual_material_cost", precision = 19, scale = 2)
+    private BigDecimal actualMaterialCost;
+
+    @Column(name = "actual_total_cost", precision = 19, scale = 2)
+    private BigDecimal actualTotalCost;
+
+    @Lob
+    @Column(name = "completion_notes")
+    private String completionNotes;
+
+    @Lob
+    @Column(name = "failure_cause")
+    private String failureCause;
+
+    @Lob
+    @Column(name = "remedy_action")
+    private String remedyAction;
+
+    @Column(name = "before_photo_url", length = 512)
+    private String beforePhotoUrl;
+
+    @Column(name = "after_photo_url", length = 512)
+    private String afterPhotoUrl;
+
+    @Lob
+    @Column(name = "supervisor_notes")
+    private String supervisorNotes;
 
     @Builder.Default
     @Column(name = "deleted", nullable = false)
@@ -122,4 +176,3 @@ public class WorkOrder {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 }
-

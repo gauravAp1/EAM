@@ -279,7 +279,7 @@ public class PreventiveMaintenanceService {
                 .priority(t.getDefaultPriority())
                 .woTitle("PM: " + t.getPmName())
                 .descriptionScope("Auto-generated from PM Template: " + t.getPmId())
-                .status(WorkOrderStatus.PLANNED)
+.status(WorkOrderStatus.SCHEDULED)
                 .source(WorkOrderSource.PM)
                 .pmTemplate(t)
                 .pmDueDate(dueDate)
@@ -393,4 +393,3 @@ public class PreventiveMaintenanceService {
                 .build();
     }
 }
-

@@ -24,9 +24,11 @@ public class VendorService {
 
     @Transactional
     public VendorResponse create(VendorCreateRequest req) {
+        // Determine vendor ID: use provided one or generate new one
+        String vendorId = determineVendorId(req.getVendorId());
 
         Vendor vendor = Vendor.builder()
-                .vendorId(generateUniqueVendorId())
+                .vendorId(vendorId)
                 .vendorName(req.getVendorName().trim())
                 .address(req.getAddress())
                 .contactPerson(req.getContactPerson().trim())
@@ -94,6 +96,30 @@ public class VendorService {
         if (value != null && !value.trim().isEmpty()) {
             setter.accept(value.trim());
         }
+    }
+
+    /**
+     * Determines vendor ID: uses provided ID if valid, otherwise generates a new one.
+     * Validates that the provided ID is unique.
+     */
+    private String determineVendorId(String providedVendorId) {
+        // If user provided a vendor ID
+        if (providedVendorId != null && !providedVendorId.trim().isEmpty()) {
+            String trimmedId = providedVendorId.trim();
+            
+            // Check if the provided vendor ID already exists
+            if (vendorRepository.existsByVendorId(trimmedId)) {
+                throw new ResponseStatusException(
+                    HttpStatus.CONFLICT, 
+                    "Vendor ID '" + trimmedId + "' already exists"
+                );
+            }
+            
+            return trimmedId;
+        }
+        
+        // Otherwise, generate a new unique vendor ID
+        return generateUniqueVendorId();
     }
 
     private String generateUniqueVendorId() {

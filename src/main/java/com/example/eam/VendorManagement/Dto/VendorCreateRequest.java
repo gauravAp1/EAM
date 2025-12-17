@@ -11,6 +11,8 @@ public class VendorCreateRequest {
     @NotBlank
     private String vendorName;
 
+    private String vendorId;
+
     private String address;
 
     @NotBlank
