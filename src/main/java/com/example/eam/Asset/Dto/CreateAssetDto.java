@@ -24,8 +24,6 @@ public class CreateAssetDto {
 
     private String assetType;
 
-    private Long parentAssetId;      // Parent Asset (optional)
-
     @NotNull
     private AssetStatus status;      // Status*
 

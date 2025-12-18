@@ -15,7 +15,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -38,7 +44,9 @@ public class TechnicianTeamService {
                 .build();
 
         TechnicianTeam saved = technicianTeamRepository.save(team);
-        return toDetailsResponse(saved);
+        applyTeamMembership(saved, request.getTechnicianIds(), request.getTeamLeaderId());
+        TechnicianTeam reloaded = getTeamOrThrow(saved.getId());
+        return toDetailsResponse(reloaded);
     }
 
     @Transactional(readOnly = true)
@@ -82,8 +90,11 @@ public class TechnicianTeamService {
         if (request.getEndDate() != null) team.setEndDate(request.getEndDate());
         if (request.getNotes() != null) team.setNotes(request.getNotes());
 
-        TechnicianTeam saved = technicianTeamRepository.save(team);
-        return toDetailsResponse(saved);
+        technicianTeamRepository.save(team);
+        applyTeamMembership(team, request.getTechnicianIds(), request.getTeamLeaderId());
+
+        TechnicianTeam reloaded = getTeamOrThrow(team.getId());
+        return toDetailsResponse(reloaded);
     }
 
     @Transactional
@@ -93,6 +104,118 @@ public class TechnicianTeamService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot delete team with assigned technicians");
         }
         technicianTeamRepository.delete(team);
+    }
+
+    private void applyTeamMembership(TechnicianTeam team, List<Long> technicianIds, Long requestedLeaderId) {
+        boolean replaceMembership = technicianIds != null;
+        if (!replaceMembership && requestedLeaderId == null) {
+            return;
+        }
+
+        List<Technician> currentMembers = technicianRepository.findByTeam_Id(team.getId());
+        Set<Long> desiredIds;
+
+        if (replaceMembership) {
+            if (technicianIds.stream().anyMatch(Objects::isNull)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Technician IDs cannot be null");
+            }
+            desiredIds = technicianIds.stream()
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
+        } else {
+            desiredIds = currentMembers.stream()
+                    .map(Technician::getId)
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
+        }
+
+        if (requestedLeaderId != null && !desiredIds.contains(requestedLeaderId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Team leader must be part of the assigned technicians");
+        }
+
+        if (replaceMembership) {
+            syncTeamTechnicians(team, desiredIds, requestedLeaderId, currentMembers);
+        } else {
+            updateLeaderOnly(currentMembers, requestedLeaderId);
+        }
+    }
+
+    private void syncTeamTechnicians(TechnicianTeam team,
+                                     Set<Long> desiredIds,
+                                     Long requestedLeaderId,
+                                     List<Technician> currentMembers) {
+        if (desiredIds.isEmpty()) {
+            if (currentMembers.isEmpty()) return;
+            currentMembers.forEach(member -> {
+                member.setTeam(null);
+                member.setTeamLeader(false);
+            });
+            technicianRepository.saveAll(currentMembers);
+            return;
+        }
+
+        List<Technician> requestedTechnicians = technicianRepository.findAllById(desiredIds);
+        if (requestedTechnicians.size() != desiredIds.size()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "One or more technicians were not found");
+        }
+
+        Long leaderId = resolveLeaderId(requestedLeaderId, desiredIds, currentMembers);
+        Map<Long, Technician> requestedMap = requestedTechnicians.stream()
+                .collect(Collectors.toMap(Technician::getId, tech -> tech));
+
+        List<Technician> dirty = new ArrayList<>();
+
+        for (Technician member : currentMembers) {
+            if (!desiredIds.contains(member.getId())) {
+                member.setTeam(null);
+                member.setTeamLeader(false);
+                dirty.add(member);
+            }
+        }
+
+        for (Long technicianId : desiredIds) {
+            Technician technician = requestedMap.get(technicianId);
+            technician.setTeam(team);
+            technician.setTeamLeader(leaderId != null && leaderId.equals(technicianId));
+            dirty.add(technician);
+        }
+
+        if (!dirty.isEmpty()) {
+            technicianRepository.saveAll(dirty);
+        }
+    }
+
+    private void updateLeaderOnly(List<Technician> members, Long leaderId) {
+        if (leaderId == null) return;
+        if (members.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Team has no technicians to assign as leader");
+        }
+
+        boolean found = false;
+        for (Technician member : members) {
+            boolean isLeader = leaderId.equals(member.getId());
+            if (isLeader) {
+                found = true;
+            }
+            member.setTeamLeader(isLeader);
+        }
+
+        if (!found) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Team leader must be part of the team");
+        }
+
+        technicianRepository.saveAll(members);
+    }
+
+    private Long resolveLeaderId(Long requestedLeaderId, Set<Long> desiredIds, List<Technician> currentMembers) {
+        if (requestedLeaderId != null) {
+            return requestedLeaderId;
+        }
+
+        return currentMembers.stream()
+                .filter(Technician::isTeamLeader)
+                .map(Technician::getId)
+                .filter(desiredIds::contains)
+                .findFirst()
+                .orElse(null);
     }
 
     private TechnicianTeam getTeamOrThrow(Long id) {

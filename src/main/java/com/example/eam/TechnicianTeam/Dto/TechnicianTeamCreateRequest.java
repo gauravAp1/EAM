@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @Data
 public class TechnicianTeamCreateRequest {
@@ -21,4 +22,8 @@ public class TechnicianTeamCreateRequest {
     private LocalDate endDate;
 
     private String notes;
+
+    private List<Long> technicianIds;
+
+    private Long teamLeaderId;
 }

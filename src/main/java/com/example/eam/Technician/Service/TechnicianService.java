@@ -5,7 +5,6 @@ import com.example.eam.Technician.Dto.*;
 import com.example.eam.Technician.Entity.Technician;
 import com.example.eam.Technician.Repository.TechnicianRepository;
 import com.example.eam.TechnicianTeam.Entity.TechnicianTeam;
-import com.example.eam.TechnicianTeam.Repository.TechnicianTeamRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -21,33 +20,19 @@ import java.util.List;
 public class TechnicianService {
 
     private final TechnicianRepository technicianRepository;
-    private final TechnicianTeamRepository technicianTeamRepository;
 
     @Transactional
     public TechnicianDetailsResponse createTechnician(TechnicianCreateRequest request) {
-        TechnicianTeam team = null;
-        if (request.getTeamId() != null) {
-            team = technicianTeamRepository.findById(request.getTeamId())
-                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Technician team not found"));
-        }
-
         String email = safeTrim(request.getEmail());
         if (email != null && technicianRepository.existsByEmailIgnoreCase(email)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Technician with the same email already exists");
         }
 
-        boolean teamLeaderFlag = Boolean.TRUE.equals(request.getTeamLeader());
-        if (teamLeaderFlag && team == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Team assignment is required when setting a team leader");
-        }
+
 
         TechnicianStatus status = request.getStatus() != null ? request.getStatus() : TechnicianStatus.ACTIVE;
         String firstName = request.getFirstName().trim();
         String lastName = request.getLastName().trim();
-
-        if (teamLeaderFlag) {
-            demoteExistingLeader(team.getId(), null);
-        }
 
         Technician technician = Technician.builder()
                 .firstName(firstName)
@@ -62,8 +47,6 @@ public class TechnicianService {
                 .workShift(safeTrim(request.getWorkShift()))
                 .certifications(request.getCertifications())
                 .notes(request.getNotes())
-                .team(team)
-                .teamLeader(teamLeaderFlag)
                 .build();
 
         Technician saved = technicianRepository.save(technician);
@@ -132,24 +115,6 @@ public class TechnicianService {
         if (request.getCertifications() != null) technician.setCertifications(request.getCertifications());
         if (request.getNotes() != null) technician.setNotes(request.getNotes());
 
-        if (request.getTeamId() != null) {
-            TechnicianTeam team = technicianTeamRepository.findById(request.getTeamId())
-                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Technician team not found"));
-            technician.setTeam(team);
-        }
-
-        if (request.getTeamLeader() != null) {
-            boolean teamLeaderFlag = request.getTeamLeader();
-            TechnicianTeam team = technician.getTeam();
-            if (teamLeaderFlag && team == null) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Team assignment is required when setting a team leader");
-            }
-            if (teamLeaderFlag) {
-                demoteExistingLeader(team.getId(), technician.getId());
-            }
-            technician.setTeamLeader(teamLeaderFlag);
-        }
-
         Technician saved = technicianRepository.save(technician);
         return toDetailsResponse(saved);
     }
@@ -195,13 +160,4 @@ public class TechnicianService {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
-    private void demoteExistingLeader(Long teamId, Long excludeTechnicianId) {
-        if (teamId == null) return;
-        technicianRepository.findByTeam_IdAndTeamLeaderTrue(teamId)
-                .filter(existing -> excludeTechnicianId == null || !existing.getId().equals(excludeTechnicianId))
-                .ifPresent(existing -> {
-                    existing.setTeamLeader(false);
-                    technicianRepository.save(existing);
-                });
-    }
 }

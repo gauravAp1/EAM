@@ -3,7 +3,7 @@ package com.example.eam.Technician.Repository;
 import com.example.eam.Technician.Entity.Technician;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-import java.util.Optional;
+import java.util.List;
 
 public interface TechnicianRepository extends JpaRepository<Technician, Long> {
 
@@ -11,5 +11,5 @@ public interface TechnicianRepository extends JpaRepository<Technician, Long> {
 
     boolean existsByTeam_Id(Long teamId);
 
-    Optional<Technician> findByTeam_IdAndTeamLeaderTrue(Long teamId);
+    List<Technician> findByTeam_Id(Long teamId);
 }

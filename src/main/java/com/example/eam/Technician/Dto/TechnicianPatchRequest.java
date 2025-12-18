@@ -34,8 +34,4 @@ public class TechnicianPatchRequest {
     private String certifications;
 
     private String notes;
-
-    private Long teamId;
-
-    private Boolean teamLeader;
 }

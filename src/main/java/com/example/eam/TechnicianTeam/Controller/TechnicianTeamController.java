@@ -45,6 +45,7 @@ public class TechnicianTeamController {
         return ResponseEntity.ok(ApiResponse.successResponse(HttpStatus.OK.value(), "Technician team updated successfully", data));
     }
 
+
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable Long id) {
         technicianTeamService.deleteTeam(id);

@@ -33,14 +33,14 @@ public class AssetService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Asset ID already exists");
         }
 
-        Asset parent = null;
-        if (request.getParentAssetId() != null) {
-            parent = assetRepository.findById(request.getParentAssetId())
-                    .orElseThrow(() -> new ResponseStatusException(
-                            HttpStatus.BAD_REQUEST,
-                            "Parent asset not found"
-                    ));
-        }
+        // Asset parent = null;
+        // if (request.getParentAssetId() != null) {
+        //     parent = assetRepository.findById(request.getParentAssetId())
+        //             .orElseThrow(() -> new ResponseStatusException(
+        //                     HttpStatus.BAD_REQUEST,
+        //                     "Parent asset not found"
+        //             ));
+        // }
 
         Asset asset = Asset.builder()
                 .assetId(request.getAssetId())
@@ -48,7 +48,7 @@ public class AssetService {
                 .shortDescription(request.getShortDescription())
                 .assetCategory(request.getAssetCategory())
                 .assetType(request.getAssetType())
-                .parentAsset(parent)
+                // .parentAsset(parent)
                 .status(request.getStatus())
                 .criticality(request.getCriticality())
                 .ownership(request.getOwnership())
@@ -198,14 +198,14 @@ public class AssetService {
             if (basic.getCriticality() != null) {
                 asset.setCriticality(basic.getCriticality());
             }
-            if (basic.getParentAssetId() != null) {
-                Asset parent = assetRepository.findById(basic.getParentAssetId())
-                        .orElseThrow(() -> new ResponseStatusException(
-                                HttpStatus.BAD_REQUEST,
-                                "Parent asset not found"
-                        ));
-                asset.setParentAsset(parent);
-            }
+            // if (basic.getParentAssetId() != null) {
+            //     Asset parent = assetRepository.findById(basic.getParentAssetId())
+            //             .orElseThrow(() -> new ResponseStatusException(
+            //                     HttpStatus.BAD_REQUEST,
+            //                     "Parent asset not found"
+            //             ));
+            //     asset.setParentAsset(parent);
+            // }
         }
 
         // Location section
@@ -442,7 +442,7 @@ public class AssetService {
                 .shortDescription(asset.getShortDescription())
                 .assetCategory(asset.getAssetCategory())
                 .assetType(asset.getAssetType())
-                .parentAssetId(asset.getParentAsset() != null ? asset.getParentAsset().getId() : null)
+                // .parentAssetId(asset.getParentAsset() != null ? asset.getParentAsset().getId() : null)
                 .status(asset.getStatus())
                 .criticality(asset.getCriticality())
                 .ownership(asset.getOwnership())

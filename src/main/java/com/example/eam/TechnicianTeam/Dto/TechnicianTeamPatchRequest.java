@@ -4,6 +4,7 @@ import com.example.eam.Enum.TechnicianTeamStatus;
 import lombok.Data;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @Data
 public class TechnicianTeamPatchRequest {
@@ -19,4 +20,8 @@ public class TechnicianTeamPatchRequest {
     private LocalDate endDate;
 
     private String notes;
+
+    private List<Long> technicianIds;
+
+    private Long teamLeaderId;
 }
