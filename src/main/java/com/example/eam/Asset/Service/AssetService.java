@@ -73,8 +73,7 @@ public class AssetService {
                     return l;
                 });
 
-        loc.setPrimaryLocation(dto.getPrimaryLocation());
-        loc.setFunctionalLocation(dto.getFunctionalLocation());
+        loc.setLocation(dto.getLocation());
         loc.setDepartment(dto.getDepartment());
         loc.setCostCenter(dto.getCostCenter());
         loc.setAssignedOwner(dto.getAssignedOwner());
@@ -219,8 +218,7 @@ public class AssetService {
                         return l;
                     });
 
-            updateIfNotNull(dto.getPrimaryLocation(), loc::setPrimaryLocation);
-            updateIfNotNull(dto.getFunctionalLocation(), loc::setFunctionalLocation);
+            updateIfNotNull(dto.getLocation(), loc::setLocation);
             updateIfNotNull(dto.getDepartment(), loc::setDepartment);
             updateIfNotNull(dto.getCostCenter(), loc::setCostCenter);
             updateIfNotNull(dto.getAssignedOwner(), loc::setAssignedOwner);
@@ -407,8 +405,7 @@ public class AssetService {
         AssetLocationDto locDto = null;
         if (loc != null) {
             locDto = new AssetLocationDto();
-            locDto.setPrimaryLocation(loc.getPrimaryLocation());
-            locDto.setFunctionalLocation(loc.getFunctionalLocation());
+            locDto.setLocation(loc.getLocation());
             locDto.setDepartment(loc.getDepartment());
             locDto.setCostCenter(loc.getCostCenter());
             locDto.setAssignedOwner(loc.getAssignedOwner());

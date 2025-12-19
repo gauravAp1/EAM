@@ -8,9 +8,8 @@ import lombok.Data;
 public class AssetLocationDto {
 
     @NotBlank
-    private String primaryLocation;      // Primary Location*
+    private String location;     
 
-    private String functionalLocation;
     private String department;
     private String costCenter;
     private String assignedOwner;

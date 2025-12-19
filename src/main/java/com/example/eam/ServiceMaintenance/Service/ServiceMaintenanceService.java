@@ -199,7 +199,7 @@ public class ServiceMaintenanceService {
         if (asset == null) return null;
 
         return assetLocationRepository.findByAsset_Id(asset.getId())
-                .map(AssetLocation::getPrimaryLocation)
+                .map(AssetLocation::getLocation)
                 .orElse(null);
     }
 

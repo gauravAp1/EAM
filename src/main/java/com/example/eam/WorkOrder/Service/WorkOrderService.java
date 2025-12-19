@@ -426,7 +426,7 @@ public WorkOrderDetailsResponse convertServiceRequestToWorkOrder(Long serviceReq
         if (asset == null) return null;
 
         return assetLocationRepository.findByAsset_Id(asset.getId())
-                .map(AssetLocation::getPrimaryLocation)
+                .map(AssetLocation::getLocation)
                 .filter(v -> !isBlank(v))
                 .orElse(null);
     }

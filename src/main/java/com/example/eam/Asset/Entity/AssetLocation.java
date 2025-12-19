@@ -21,11 +21,8 @@ public class AssetLocation {
     @JoinColumn(name = "asset_id", nullable = false, unique = true)
     private Asset asset;
 
-    @Column(name = "primary_location", nullable = false, length = 255)
-    private String primaryLocation;
-
-    @Column(name = "functional_location", length = 255)
-    private String functionalLocation;
+    @Column(name = "location", nullable = false, length = 255)
+    private String location;
 
     @Column(name = "department", length = 255)
     private String department;
