@@ -10,7 +10,7 @@ import java.math.BigDecimal;
 @Data
 public class InventoryItemCreateRequest {
 
-    @NotBlank
+    @Size(max = 64)
     private String itemId;
 
     @NotBlank

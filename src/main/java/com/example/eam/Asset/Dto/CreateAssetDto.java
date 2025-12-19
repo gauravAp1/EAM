@@ -6,13 +6,14 @@ import com.example.eam.Enum.AssetStatus;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 @Data
 public class CreateAssetDto {
 
-    @NotBlank
-    private String assetId;          // Asset ID*
+    @Size(max = 64)
+    private String assetId;          // Asset ID (optional - auto-generated if missing)
 
     @NotBlank
     private String assetName;        // Asset Name*

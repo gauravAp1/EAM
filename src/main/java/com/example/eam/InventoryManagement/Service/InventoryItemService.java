@@ -33,10 +33,7 @@ public class InventoryItemService {
     @Transactional
     public InventoryItemResponse create(InventoryItemCreateRequest dto) {
 
-        String itemId = dto.getItemId().trim();
-        if (itemRepo.existsByItemId(itemId)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Item ID already exists: " + itemId);
-        }
+        String itemId = determineItemId(dto.getItemId());
 
         Vendor vendor = null;
         if (dto.getPrimaryVendorDbId() != null) {
@@ -238,6 +235,30 @@ public class InventoryItemService {
                 .deliveryLocation(r.getDeliveryLocation())
                 .note(r.getNote())
                 .build();
+    }
+
+    private String determineItemId(String providedItemId) {
+        if (providedItemId != null && !providedItemId.trim().isEmpty()) {
+            String trimmed = providedItemId.trim();
+            if (itemRepo.existsByItemId(trimmed)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Item ID already exists: " + trimmed);
+            }
+            return trimmed;
+        }
+
+        return generateUniqueItemId();
+    }
+
+    private String generateUniqueItemId() {
+        String datePart = LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE);
+        for (int attempt = 0; attempt < 30; attempt++) {
+            int rand = ThreadLocalRandom.current().nextInt(0, 10000);
+            String candidate = String.format("ITEM-%s-%04d", datePart, rand);
+            if (!itemRepo.existsByItemId(candidate)) {
+                return candidate;
+            }
+        }
+        throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Unable to generate unique Item ID");
     }
 
     private String generateUniqueReorderId() {

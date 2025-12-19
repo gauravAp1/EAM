@@ -11,6 +11,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Consumer;
 
 @Service
@@ -29,9 +32,7 @@ public class AssetService {
     @Transactional
     public AssetDetailsResponse createAsset(CreateAssetDto request) {
 
-        if (assetRepository.existsByAssetId(request.getAssetId())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Asset ID already exists");
-        }
+        String assetId = determineAssetId(request.getAssetId());
 
         // Asset parent = null;
         // if (request.getParentAssetId() != null) {
@@ -43,7 +44,7 @@ public class AssetService {
         // }
 
         Asset asset = Asset.builder()
-                .assetId(request.getAssetId())
+                .assetId(assetId)
                 .assetName(request.getAssetName())
                 .shortDescription(request.getShortDescription())
                 .assetCategory(request.getAssetCategory())
@@ -365,6 +366,34 @@ public class AssetService {
         if (value != null) {
             setter.accept(value);
         }
+    }
+
+    private String determineAssetId(String providedAssetId) {
+        if (providedAssetId != null && !providedAssetId.trim().isEmpty()) {
+            String trimmedId = providedAssetId.trim();
+            if (assetRepository.existsByAssetId(trimmedId)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Asset ID '" + trimmedId + "' already exists");
+            }
+            return trimmedId;
+        }
+
+        return generateUniqueAssetId();
+    }
+
+    private String generateUniqueAssetId() {
+        String datePart = LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE); // YYYYMMDD
+
+        for (int attempt = 0; attempt < 30; attempt++) {
+            int rand = ThreadLocalRandom.current().nextInt(0, 10000);
+            String candidate = String.format("AST-%s-%04d", datePart, rand);
+            if (!assetRepository.existsByAssetId(candidate)) {
+                return candidate;
+            }
+        }
+
+        throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                "Unable to generate unique Asset ID");
     }
 
     private AssetDetailsResponse mapToDetails(
