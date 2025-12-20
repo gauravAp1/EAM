@@ -2,6 +2,8 @@ package com.example.eam.ServiceMaintenance.Controller;
 
 import com.example.eam.Common.ApiResponse;
 import com.example.eam.ServiceMaintenance.Dto.ServiceRequestCreateDto;
+import com.example.eam.ServiceMaintenance.Dto.ServiceRequestApproveDto;
+import com.example.eam.ServiceMaintenance.Dto.ServiceRequestRejectDto;
 import com.example.eam.ServiceMaintenance.Dto.ServiceRequestResponse;
 import com.example.eam.ServiceMaintenance.Dto.ServiceRequestUpdateDto;
 import com.example.eam.ServiceMaintenance.Service.ServiceMaintenanceService;
@@ -53,6 +55,28 @@ public class ServiceMaintenanceController {
         return ResponseEntity.status(HttpStatus.CREATED).body(
                 ApiResponse.successResponse(HttpStatus.CREATED.value(),
                         "Service request converted to work order successfully", wo)
+        );
+    }
+
+    @PostMapping("/{id}/approve")
+    public ResponseEntity<ApiResponse<ServiceRequestResponse>> approve(
+            @PathVariable Long id,
+            @RequestBody(required = false) ServiceRequestApproveDto dto) {
+
+        ServiceRequestResponse resp = service.approve(id, dto);
+        return ResponseEntity.ok(
+                ApiResponse.successResponse(HttpStatus.OK.value(), "Service request approved successfully", resp)
+        );
+    }
+
+    @PostMapping("/{id}/reject")
+    public ResponseEntity<ApiResponse<ServiceRequestResponse>> reject(
+            @PathVariable Long id,
+            @Valid @RequestBody ServiceRequestRejectDto dto) {
+
+        ServiceRequestResponse resp = service.reject(id, dto);
+        return ResponseEntity.ok(
+                ApiResponse.successResponse(HttpStatus.OK.value(), "Service request rejected successfully", resp)
         );
     }
 

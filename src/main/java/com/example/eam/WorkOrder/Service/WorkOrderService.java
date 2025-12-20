@@ -141,10 +141,14 @@ public WorkOrderDetailsResponse convertServiceRequestToWorkOrder(Long serviceReq
     try {
         log.info("Starting conversion of Service Request ID: {}", serviceRequestDbId);
         
-        ServiceMaintenance sr = serviceMaintenanceRepository.findById(serviceRequestDbId)
+        ServiceMaintenance sr = serviceMaintenanceRepository.findByIdAndDeletedFalse(serviceRequestDbId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Service Request not found"));
 
         log.info("Found Service Request: {}, Status: {}", sr.getRequestId(), sr.getStatus());
+
+        if (sr.getStatus() != ServiceRequestStatus.APPROVED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Service Request must be APPROVED before conversion to Work Order");
+        }
 
         // Already converted?
         if (sr.getStatus() == ServiceRequestStatus.CONVERTED_TO_WO) {
@@ -206,6 +210,7 @@ public WorkOrderDetailsResponse convertServiceRequestToWorkOrder(Long serviceReq
 
         sr.setStatus(ServiceRequestStatus.CONVERTED_TO_WO);
         sr.setLinkedWorkOrderId(saved.getWorkOrderId());
+        sr.setDeleted(true);
         serviceMaintenanceRepository.save(sr);
         log.info("Service Request updated with linked Work Order ID");
 

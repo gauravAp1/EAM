@@ -46,9 +46,9 @@ public class DashboardService {
         LocalDate twoWeeksAgo = today.minusDays(14);
 
         MetricCard openServiceRequests = buildMetric(
-                serviceMaintenanceRepository.countByStatusIn(OPEN_SR_STATUSES),
-                serviceMaintenanceRepository.countByStatusInAndRequestDateBetween(OPEN_SR_STATUSES, weekStart, now),
-                serviceMaintenanceRepository.countByStatusInAndRequestDateBetween(OPEN_SR_STATUSES, prevWeekStart, weekStart)
+                serviceMaintenanceRepository.countByDeletedFalseAndStatusIn(OPEN_SR_STATUSES),
+                serviceMaintenanceRepository.countByDeletedFalseAndStatusInAndRequestDateBetween(OPEN_SR_STATUSES, weekStart, now),
+                serviceMaintenanceRepository.countByDeletedFalseAndStatusInAndRequestDateBetween(OPEN_SR_STATUSES, prevWeekStart, weekStart)
         );
 
         MetricCard activeWorkOrders = buildMetric(

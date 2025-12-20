@@ -42,5 +42,8 @@ public class ServiceRequestResponse {
     private String attachmentUrl;
 
     private ServiceRequestStatus status;
+    private String approvedBy;
+    private LocalDateTime approvedAt;
+    private String rejectionReason;
 }
 

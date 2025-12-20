@@ -5,7 +5,9 @@ import com.example.eam.Asset.Entity.AssetLocation;
 import com.example.eam.Asset.Repository.AssetLocationRepository;
 import com.example.eam.Asset.Repository.AssetRepository;
 import com.example.eam.Enum.ServiceRequestStatus;
+import com.example.eam.ServiceMaintenance.Dto.ServiceRequestApproveDto;
 import com.example.eam.ServiceMaintenance.Dto.ServiceRequestCreateDto;
+import com.example.eam.ServiceMaintenance.Dto.ServiceRequestRejectDto;
 import com.example.eam.ServiceMaintenance.Dto.ServiceRequestResponse;
 import com.example.eam.ServiceMaintenance.Dto.ServiceRequestUpdateDto;
 import com.example.eam.ServiceMaintenance.Entity.ServiceMaintenance;
@@ -66,6 +68,9 @@ public class ServiceMaintenanceService {
                 .safetyRisk(dto.getSafetyRisk())
                 .attachmentUrl(dto.getAttachmentUrl())
                 .status(ServiceRequestStatus.NEW)
+                .rejectionReason(null)
+                .approvedBy(null)
+                .approvedAt(null)
                 .build();
 
         ServiceMaintenance saved = serviceRepo.save(entity);
@@ -115,7 +120,7 @@ public class ServiceMaintenanceService {
 
     @Transactional(readOnly = true)
     public Page<ServiceRequestResponse> list(Pageable pageable) {
-        return serviceRepo.findByStatusNot(ServiceRequestStatus.CONVERTED_TO_WO, pageable)
+        return serviceRepo.findByDeletedFalseAndStatusNot(ServiceRequestStatus.CONVERTED_TO_WO, pageable)
                 .map(this::toResponse);
     }
 
@@ -124,6 +129,13 @@ public class ServiceMaintenanceService {
     @Transactional
     public ServiceRequestResponse update(Long id, ServiceRequestUpdateDto dto) {
         ServiceMaintenance entity = getOrThrow(id);
+
+        if (entity.getStatus() == ServiceRequestStatus.APPROVED
+                || entity.getStatus() == ServiceRequestStatus.REJECTED
+                || entity.getStatus() == ServiceRequestStatus.CONVERTED_TO_WO) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Cannot edit service request in status " + entity.getStatus());
+        }
 
         // Request ID change (optional)
         if (dto.getRequestId() != null && !dto.getRequestId().isBlank()) {
@@ -168,7 +180,12 @@ public class ServiceMaintenanceService {
         updateIfNotNull(dto.getPreferredDate(), entity::setPreferredDate);
         updateIfNotNull(dto.getPreferredTime(), entity::setPreferredTime);
         updateIfNotNull(dto.getSafetyRisk(), entity::setSafetyRisk);
-        updateIfNotNull(dto.getStatus(), entity::setStatus);
+        if (dto.getStatus() != null) {
+            if (dto.getStatus() != ServiceRequestStatus.NEW && dto.getStatus() != ServiceRequestStatus.UNDER_REVIEW) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Status can only be moved to NEW or UNDER_REVIEW via update");
+            }
+            entity.setStatus(dto.getStatus());
+        }
 
         ServiceMaintenance saved = serviceRepo.save(entity);
         return toResponse(saved);
@@ -179,13 +196,54 @@ public class ServiceMaintenanceService {
     @Transactional
     public void delete(Long id) {
         ServiceMaintenance entity = getOrThrow(id);
-        serviceRepo.delete(entity);
+        entity.setDeleted(true);
+        serviceRepo.save(entity);
+    }
+
+    // ---------- APPROVE / REJECT ----------
+
+    @Transactional
+    public ServiceRequestResponse approve(Long id, ServiceRequestApproveDto dto) {
+        ServiceMaintenance entity = getOrThrow(id);
+        if (entity.getStatus() == ServiceRequestStatus.CONVERTED_TO_WO) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Service request already converted to Work Order");
+        }
+        if (entity.getStatus() == ServiceRequestStatus.REJECTED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Service request already rejected");
+        }
+        entity.setStatus(ServiceRequestStatus.APPROVED);
+        entity.setApprovedBy(dto != null ? trim(dto.getApprovedBy()) : null);
+        entity.setApprovedAt(LocalDateTime.now());
+        entity.setRejectionReason(null);
+        entity.setDeleted(false);
+        return toResponse(serviceRepo.save(entity));
+    }
+
+    @Transactional
+    public ServiceRequestResponse reject(Long id, ServiceRequestRejectDto dto) {
+        ServiceMaintenance entity = getOrThrow(id);
+        if (entity.getStatus() == ServiceRequestStatus.CONVERTED_TO_WO) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Service request already converted to Work Order");
+        }
+        if (entity.getStatus() == ServiceRequestStatus.APPROVED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Approved request cannot be rejected");
+        }
+        String reason = (dto != null && dto.getReason() != null) ? dto.getReason().trim() : null;
+        if (reason == null || reason.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Rejection reason is required");
+        }
+        entity.setStatus(ServiceRequestStatus.REJECTED);
+        entity.setRejectionReason(reason);
+        entity.setApprovedBy(null);
+        entity.setApprovedAt(null);
+        entity.setDeleted(false);
+        return toResponse(serviceRepo.save(entity));
     }
 
     // ---------- Helpers ----------
 
     private ServiceMaintenance getOrThrow(Long id) {
-        return serviceRepo.findById(id)
+        return serviceRepo.findByIdAndDeletedFalse(id)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
                         "Service request not found: " + id
@@ -238,6 +296,15 @@ public class ServiceMaintenanceService {
                 .safetyRisk(entity.getSafetyRisk())
                 .attachmentUrl(entity.getAttachmentUrl())
                 .status(entity.getStatus())
+                .approvedBy(entity.getApprovedBy())
+                .approvedAt(entity.getApprovedAt())
+                .rejectionReason(entity.getRejectionReason())
                 .build();
+    }
+
+    private String trim(String val) {
+        if (val == null) return null;
+        String t = val.trim();
+        return t.isEmpty() ? null : t;
     }
 }

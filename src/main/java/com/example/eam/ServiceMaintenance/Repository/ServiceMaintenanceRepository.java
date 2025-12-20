@@ -12,19 +12,21 @@ import java.util.Optional;
 
 public interface ServiceMaintenanceRepository extends JpaRepository<ServiceMaintenance, Long> {
 
-    Page<ServiceMaintenance> findByStatus(ServiceRequestStatus status, Pageable pageable);
+    Optional<ServiceMaintenance> findByIdAndDeletedFalse(Long id);
 
-    Page<ServiceMaintenance> findByAsset_Id(Long assetId, Pageable pageable);
+    Page<ServiceMaintenance> findByDeletedFalseAndStatus(ServiceRequestStatus status, Pageable pageable);
+
+    Page<ServiceMaintenance> findByDeletedFalseAndAsset_Id(Long assetId, Pageable pageable);
 
     boolean existsByRequestId(String requestId);
 
     Optional<ServiceMaintenance> findTopByOrderByIdDesc();   // for auto-numbering
 
-    Page<ServiceMaintenance> findByStatusNot(ServiceRequestStatus status, Pageable pageable);
+    Page<ServiceMaintenance> findByDeletedFalseAndStatusNot(ServiceRequestStatus status, Pageable pageable);
 
-    long countByStatusIn(Collection<ServiceRequestStatus> statuses);
+    long countByDeletedFalseAndStatusIn(Collection<ServiceRequestStatus> statuses);
 
-    long countByStatusInAndRequestDateBetween(Collection<ServiceRequestStatus> statuses,
+    long countByDeletedFalseAndStatusInAndRequestDateBetween(Collection<ServiceRequestStatus> statuses,
                                               LocalDateTime start,
                                               LocalDateTime end);
 }
