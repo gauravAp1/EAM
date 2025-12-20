@@ -1,0 +1,30 @@
+package com.example.eam.Procurement.Dto;
+
+import com.example.eam.Procurement.Enum.PurchaseOrderStatus;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.List;
+
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class PurchaseOrderResponse {
+
+    private Long id;
+    private String poNumber;
+    private Long vendorId;
+    private Long mrId;
+    private PurchaseOrderStatus status;
+    private LocalDate expectedDeliveryDate;
+    private String remarks;
+    private String createdByUserId;
+    private Instant createdAt;
+    private Instant updatedAt;
+    private List<PurchaseOrderLineResponse> lines;
+}

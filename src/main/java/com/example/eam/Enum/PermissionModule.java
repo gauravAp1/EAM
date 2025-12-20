@@ -1,0 +1,20 @@
+package com.example.eam.Enum;
+
+
+public enum PermissionModule {
+    ASSET,
+    SERVICE_REQUEST,
+    WORK_ORDER,
+    PREVENTIVE_MAINTENANCE,
+    MATERIAL_REQUISITION,
+    PURCHASE_ORDER,
+    GOODS_RECEIPT_NOTE,
+    VENDOR,
+    INVENTORY,
+    TECHNICIAN,
+    TECHNICIAN_TEAM,
+    MANAGE_USERS,
+    MANAGE_ROLES,
+    INVITE_USER
+}
+
